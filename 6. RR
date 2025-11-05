@@ -1,0 +1,107 @@
+import java.util.*;
+
+class Process {
+    int processID;
+    int arrival, burst, waiting, turnAround, remainingTime;
+    int finish, completionTime;
+}
+
+public class RRScheduling {
+
+    public static void main(String[] args) {
+        int n, sumBurst = 0, quantum, time;
+        double avgWAT = 0, avgTAT = 0;
+        Scanner sc = new Scanner(System.in);
+        Queue<Integer> q = new LinkedList<>();
+        List<Integer> ganttProcess = new ArrayList<>();
+        List<Integer> ganttTime = new ArrayList<>();
+
+        System.out.println("*** Round Robin Scheduling (Preemptive) ***");
+        System.out.print("Enter Number of Processes: ");
+        n = sc.nextInt();
+
+        Process[] p = new Process[n];
+        for (int i = 0; i < n; i++) {
+            p[i] = new Process();
+            p[i].processID = i + 1;
+            System.out.print("Enter the arrival time for P" + (i + 1) + ": ");
+            p[i].arrival = sc.nextInt();
+            System.out.print("Enter the burst time for P" + (i + 1) + ": ");
+            p[i].burst = sc.nextInt();
+            p[i].remainingTime = p[i].burst;
+            p[i].finish = 0;
+            sumBurst += p[i].burst;
+            System.out.println();
+        }
+
+        System.out.print("\nEnter Time Quantum: ");
+        quantum = sc.nextInt();
+
+        // Sort processes by arrival time
+        Process pTemp;
+        for (int i = 0; i < n - 1; i++) {
+            for (int j = i + 1; j < n; j++) {
+                if (p[i].arrival > p[j].arrival) {
+                    pTemp = p[i];
+                    p[i] = p[j];
+                    p[j] = pTemp;
+                }
+            }
+        }
+
+        q.add(0);
+        time = p[0].arrival;
+        ganttTime.add(time);
+
+        while (!q.isEmpty()) {
+            int i = q.remove();
+
+            // Add process to Gantt chart
+            ganttProcess.add(p[i].processID);
+
+            if (p[i].remainingTime <= quantum) {
+                time += p[i].remainingTime;
+                p[i].remainingTime = 0;
+                p[i].finish = 1;
+                p[i].completionTime = time;
+                p[i].waiting = time - p[i].arrival - p[i].burst;
+                p[i].turnAround = time - p[i].arrival;
+            } else {
+                time += quantum;
+                p[i].remainingTime -= quantum;
+            }
+
+            ganttTime.add(time);
+
+            // Add new arrivals to queue
+            for (int j = 0; j < n; j++) {
+                if (p[j].arrival <= time && p[j].finish == 0 && !q.contains(j) && j != i) {
+                    q.add(j);
+                }
+            }
+
+            // If process still not finished, re-add to queue
+            if (p[i].finish == 0) {
+                q.add(i);
+            }
+        }
+
+        System.out.println("\n--------------------------------------------------------------------------------------");
+        System.out.println("Process\tArrival\tBurst\tCompletion\tTurnaround\tWaiting");
+        System.out.println("--------------------------------------------------------------------------------------");
+        for (int i = 0; i < n; i++) {
+            System.out.println("P" + p[i].processID + "\t" + p[i].arrival + "\t" + p[i].burst + "\t"
+                    + p[i].completionTime + "\t\t" + p[i].turnAround + "\t\t" + p[i].waiting);
+            avgWAT += p[i].waiting;
+            avgTAT += p[i].turnAround;
+        }
+
+        System.out.println("\nAverage Turnaround Time: " + (avgTAT / n) + " ms");
+        System.out.println("Average Waiting Time: " + (avgWAT / n) + " ms");
+
+        // Display Gantt Chart
+        System.out.println("\nGantt Chart:");
+        System.out.print(" ");
+        for (int i = 0; i < ganttProcess.size(); i++) {
+            System.out.print("P" + ganttProcess.get(i) + " ");
+        }
