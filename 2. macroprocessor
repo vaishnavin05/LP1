@@ -1,0 +1,168 @@
+import java.io.*;
+import java.util.*;
+
+class MNTEntry {
+    String name;
+    int mdtIndex;
+
+    MNTEntry(String name, int mdtIndex) {
+        this.name = name;
+        this.mdtIndex = mdtIndex;
+    }
+
+    @Override
+    public String toString() {
+        return name + "\t" + mdtIndex;
+    }
+}
+
+class MDTEntry {
+    int index;
+    String definition;
+
+    MDTEntry(int index, String definition) {
+        this.index = index;
+        this.definition = definition;
+    }
+
+    @Override
+    public String toString() {
+        return index + "\t" + definition;
+    }
+}
+
+public class TwoPassMacroProcessor {
+
+    // Tables
+    private static List<MNTEntry> MNT = new ArrayList<>();
+    private static List<MDTEntry> MDT = new ArrayList<>();
+    private static List<String> intermediateCode = new ArrayList<>();
+
+    // ----- PASS 1 -----
+    public static void passOne(List<String> source) {
+        boolean inMacro = false;
+        int mdtPointer = 1;
+        String currentMacro = null;
+        Map<String, Integer> paramPos = new HashMap<>();
+
+        for (String line : source) {
+            line = line.trim();
+            if (line.isEmpty()) continue;
+
+            String[] parts = line.split("\\s+", 2);
+            String first = parts[0].toUpperCase();
+
+            if (first.equals("MACRO")) {
+                inMacro = true;
+                continue;
+            }
+
+            if (inMacro) {
+                if (currentMacro == null) {
+                    // Macro header line
+                    String[] headerParts = parts[0].split("\\s+");
+                    String macroName = headerParts[0];
+                    String[] args = parts[1].split(",");
+                    paramPos.clear();
+
+                    for (int i = 0; i < args.length; i++) {
+                        paramPos.put(args[i].trim(), i + 1);
+                    }
+
+                    currentMacro = macroName;
+                    MNT.add(new MNTEntry(macroName, mdtPointer));
+                } else if (first.equals("MEND")) {
+                    MDT.add(new MDTEntry(mdtPointer++, "MEND"));
+                    inMacro = false;
+                    currentMacro = null;
+                } else {
+                    // Replace parameters with #n form
+                    for (Map.Entry<String, Integer> entry : paramPos.entrySet()) {
+                        line = line.replace(entry.getKey(), "#" + entry.getValue());
+                    }
+                    MDT.add(new MDTEntry(mdtPointer++, line));
+                }
+            } else {
+                intermediateCode.add(line);
+            }
+        }
+    }
+
+    // ----- PASS 2 -----
+    public static List<String> passTwo() {
+        List<String> expandedCode = new ArrayList<>();
+
+        for (String line : intermediateCode) {
+            String[] parts = line.split("\\s+", 2);
+            String opcode = parts[0];
+
+            // Check if it's a macro call
+            Optional<MNTEntry> macro = MNT.stream()
+                    .filter(m -> m.name.equalsIgnoreCase(opcode))
+                    .findFirst();
+
+            if (macro.isPresent()) {
+                String[] args = parts[1].split(",");
+                Map<Integer, String> argMap = new HashMap<>();
+                for (int i = 0; i < args.length; i++) {
+                    argMap.put(i + 1, args[i].trim());
+                }
+
+                int mdtIndex = macro.get().mdtIndex;
+                for (int i = mdtIndex - 1; i < MDT.size(); i++) {
+                    String def = MDT.get(i).definition;
+                    if (def.equals("MEND")) break;
+                    String expanded = def;
+                    for (Map.Entry<Integer, String> e : argMap.entrySet()) {
+                        expanded = expanded.replace("#" + e.getKey(), e.getValue());
+                    }
+                    expandedCode.add(expanded);
+                }
+            } else {
+                expandedCode.add(line);
+            }
+        }
+
+        return expandedCode;
+    }
+
+    // ----- MAIN -----
+    public static void main(String[] args) {
+        // Example source code
+        List<String> sourceProgram = Arrays.asList(
+                "MACRO",
+                "INCR &ARG1, &ARG2",
+                "LDA &ARG1",
+                "ADD &ARG2",
+                "STA &ARG1",
+                "MEND",
+                "START",
+                "READ A",
+                "READ B",
+                "INCR A, B",
+                "PRINT A",
+                "END"
+        );
+
+        // Pass-I
+        passOne(sourceProgram);
+
+        System.out.println("----- PASS I -----");
+        System.out.println("MNT (Macro Name Table):");
+        System.out.println("Name\tMDT Index");
+        for (MNTEntry e : MNT) System.out.println(e);
+
+        System.out.println("\nMDT (Macro Definition Table):");
+        System.out.println("Index\tDefinition");
+        for (MDTEntry e : MDT) System.out.println(e);
+
+        System.out.println("\nIntermediate Code (Without Macros):");
+        for (String s : intermediateCode) System.out.println(s);
+
+        // Pass-II
+        System.out.println("\n----- PASS II -----");
+        System.out.println("Expanded Code:");
+        List<String> expanded = passTwo();
+        for (String s : expanded) System.out.println(s);
+    }
+}
